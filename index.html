@@ -115,93 +115,101 @@
         const preview = document.getElementById("preview");
 
         async function loadImages() {
+            // Fallback list of images to use when directory listing is disabled (e.g., when deployed)
+            let imageFiles = [
+                "cleanup.sh-01.png",
+                "cleanup.sh-02.png",
+                "infra.sh-01.png",
+                "infra.sh-02.png",
+                "petclinic-ec2-terminated.png",
+                "petclinic-ec2.png"
+            ];
+
             try {
+                // Try to dynamically fetch directory listing (works in local development servers with directory listing enabled)
                 const response = await fetch("./img/");
-                const html = await response.text();
+                if (response.ok) {
+                    const html = await response.text();
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, "text/html");
+                    const links = [...doc.querySelectorAll("a")];
+                    const fetchedFiles = links
+                        .map(a => {
+                            const href = a.getAttribute("href");
+                            if (!href) return null;
+                            const decoded = decodeURIComponent(href);
+                            return decoded.split("/").pop();
+                        })
+                        .filter(filename =>
+                            filename &&
+                            /\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)$/i.test(filename)
+                        );
+                    
+                    if (fetchedFiles.length > 0) {
+                        imageFiles = [...new Set(fetchedFiles)];
+                    }
+                }
+            } catch (err) {
+                console.warn("Directory listing fetch failed, using fallback static image list:", err);
+            }
 
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, "text/html");
+            if (!imageFiles.length) {
+                gallery.innerHTML =
+                    '<div class="message">No images found in the img folder.</div>';
+                return;
+            }
 
-                const links = [...doc.querySelectorAll("a")];
+            imageFiles.sort((a, b) => a.localeCompare(b));
 
-                const imageFiles = links
-                    .map(a => a.getAttribute("href"))
-                    .filter(href =>
-                        href &&
-                        /\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)$/i.test(href)
-                    );
+            const fragment = document.createDocumentFragment();
 
-                if (!imageFiles.length) {
-                    gallery.innerHTML =
-                        '<div class="message">No images found in the img folder.</div>';
-                    return;
+            imageFiles.forEach(file => {
+                let imageUrl;
+
+                if (/^https?:\/\//i.test(file)) {
+                    imageUrl = file;
+                }
+                else if (file.startsWith("/")) {
+                    imageUrl = file;
+                }
+                else if (file.startsWith("./")) {
+                    imageUrl = "img/" + file.replace("./", "");
+                }
+                else {
+                    imageUrl = "img/" + file;
                 }
 
-                imageFiles.sort((a, b) => a.localeCompare(b));
+                const card = document.createElement("div");
+                card.className = "card";
 
-                const fragment = document.createDocumentFragment();
+                const img = document.createElement("img");
+                img.loading = "lazy";
+                img.decoding = "async";
+                img.src = encodeURI(imageUrl);
+                img.alt = file;
 
-                imageFiles.forEach(file => {
+                const name = document.createElement("div");
+                name.className = "filename";
+                name.textContent = file.split("/").pop();
 
-                    let imageUrl;
+                img.onclick = () => {
+                    preview.src = img.src;
+                    viewer.classList.add("active");
+                };
 
-                    if (/^https?:\/\//i.test(file)) {
-                        imageUrl = file;
-                    }
-                    else if (file.startsWith("/")) {
-                        imageUrl = file;
-                    }
-                    else if (file.startsWith("./")) {
-                        imageUrl = "img/" + file.replace("./", "");
-                    }
-                    else {
-                        imageUrl = "img/" + file;
-                    }
+                img.onerror = () => {
+                    console.error("Failed to load:", imageUrl);
+                    card.remove();
+                };
 
-                    const card = document.createElement("div");
-                    card.className = "card";
+                card.appendChild(img);
+                card.appendChild(name);
 
-                    const img = document.createElement("img");
-                    img.loading = "lazy";
-                    img.decoding = "async";
-                    img.src = encodeURI(imageUrl);
-                    img.alt = file;
+                fragment.appendChild(card);
+            });
 
-                    const name = document.createElement("div");
-                    name.className = "filename";
-                    name.textContent = file.split("/").pop();
-
-                    img.onclick = () => {
-                        preview.src = img.src;
-                        viewer.classList.add("active");
-                    };
-
-                    img.onerror = () => {
-                        console.error("Failed to load:", imageUrl);
-                        card.remove();
-                    };
-
-                    card.appendChild(img);
-                    card.appendChild(name);
-
-                    fragment.appendChild(card);
-                });
-
-                gallery.appendChild(fragment);
-
-            } catch (err) {
-                console.error(err);
-
-                gallery.innerHTML = `
-            <div class="message">
-                Unable to load images.<br><br>
-                Make sure:
-                <br>• Images are inside the <b>img</b> folder
-                <br>• You're running a web server
-                <br>• Directory listing is enabled
-            </div>
-        `;
-            }
+            gallery.innerHTML = ""; // Clear loader/previous messages if any
+            gallery.appendChild(fragment);
         }
 
         document.querySelector(".close").onclick = () => {
