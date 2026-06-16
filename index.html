@@ -125,32 +125,43 @@
                 "petclinic-ec2.png"
             ];
 
-            try {
-                // Try to dynamically fetch directory listing (works in local development servers with directory listing enabled)
-                const response = await fetch("./img/");
-                if (response.ok) {
-                    const html = await response.text();
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, "text/html");
-                    const links = [...doc.querySelectorAll("a")];
-                    const fetchedFiles = links
-                        .map(a => {
-                            const href = a.getAttribute("href");
-                            if (!href) return null;
-                            const decoded = decodeURIComponent(href);
-                            return decoded.split("/").pop();
-                        })
-                        .filter(filename =>
-                            filename &&
-                            /\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)$/i.test(filename)
-                        );
-                    
-                    if (fetchedFiles.length > 0) {
-                        imageFiles = [...new Set(fetchedFiles)];
+            // Only try to fetch directory listing if we are running locally (localhost, 127.0.0.1, local network IP, or file://).
+            // On deployed platforms (like GitHub Pages), directory listing is disabled, so we skip the fetch and use the fallback list.
+            const isLocal = window.location.hostname === "localhost" ||
+                window.location.hostname === "127.0.0.1" ||
+                window.location.hostname.startsWith("192.168.") ||
+                window.location.hostname.startsWith("10.") ||
+                window.location.hostname.startsWith("172.") ||
+                window.location.protocol === "file:";
+
+            if (isLocal) {
+                try {
+                    // Try to dynamically fetch directory listing (works in local development servers with directory listing enabled)
+                    const response = await fetch("./img/");
+                    if (response.ok) {
+                        const html = await response.text();
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, "text/html");
+                        const links = [...doc.querySelectorAll("a")];
+                        const fetchedFiles = links
+                            .map(a => {
+                                const href = a.getAttribute("href");
+                                if (!href) return null;
+                                const decoded = decodeURIComponent(href);
+                                return decoded.split("/").pop();
+                            })
+                            .filter(filename =>
+                                filename &&
+                                /\.(jpg|jpeg|png|gif|webp|avif|bmp|svg)$/i.test(filename)
+                            );
+
+                        if (fetchedFiles.length > 0) {
+                            imageFiles = [...new Set(fetchedFiles)];
+                        }
                     }
+                } catch (err) {
+                    console.warn("Directory listing fetch failed, using fallback static image list:", err);
                 }
-            } catch (err) {
-                console.warn("Directory listing fetch failed, using fallback static image list:", err);
             }
 
             if (!imageFiles.length) {
